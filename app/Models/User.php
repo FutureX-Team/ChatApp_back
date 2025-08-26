@@ -2,47 +2,44 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable;
+    use Notifiable;
+    use HasApiTokens;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
+    protected $table = 'users';
+
+    // جدولك لا يحتوي updated_at (فقط created_at بـ DEFAULT CURRENT_TIMESTAMP)
+    public $timestamps = false;
+
     protected $fillable = [
-        'name',
+        'username',
         'email',
-        'password',
+        'password_hash',
+        'avatar_url',
+        'is_disabled',
+        'dark_mode',
     ];
 
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var list<string>
-     */
     protected $hidden = [
-        'password',
+        'password_hash',
+        // ما عندك remember_token بالجدول، تركه هنا لا يضر لأنه غير موجود فعليًا
         'remember_token',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
-    protected function casts(): array
+    protected $casts = [
+        'is_disabled' => 'boolean',
+        'dark_mode'   => 'boolean',
+        'created_at'  => 'datetime',
+    ];
+
+    // مهم: خلي Laravel يستخدم عمود password_hash عند التحقق من كلمة المرور
+    public function getAuthPassword()
     {
-        return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
-        ];
+        return $this->password_hash;
     }
 }

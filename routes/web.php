@@ -1,7 +1,8 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Illuminate\Http\Request;
+use App\Http\Controllers\UserRegisterController;
+use App\Http\Controllers\UserLoginController;
 
-Route::get('/', function () {
-    return view('welcome');
-});
+// This file is intentionally left empty as all API routes are defined in routes/api.php
