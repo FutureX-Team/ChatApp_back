@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use App\Models\User;
 use App\Models\Tweet;
+use Illuminate\Support\Facades\Log;
 
 class UserController extends Controller
 {
@@ -50,17 +51,38 @@ class UserController extends Controller
      * GET /me
      * معلوماتي (يتطلب auth:sanctum)
      */
+    // public function me(Request $request)
+    // {
+    //     $me = $request->user()->only([
+    //         'id', 'username', 'email', 'avatar_url', 'dark_mode', 'is_disabled', 'role', 'created_at',
+    //     ]);
+
+    //     // عدد تغريداتي
+    //     $me['tweets_count'] = Tweet::where('user_id', $request->user()->id)->count();
+
+    //     return response()->json($me);
+    // }
     public function me(Request $request)
     {
+        // log incoming request user id
+        Log::info('Me endpoint called for user ID: ' . $request->user()->id);
+
         $me = $request->user()->only([
             'id', 'username', 'email', 'avatar_url', 'dark_mode', 'is_disabled', 'role', 'created_at',
         ]);
+        Log::info('User basic info fetched', $me);
 
         // عدد تغريداتي
         $me['tweets_count'] = Tweet::where('user_id', $request->user()->id)->count();
+        Log::info('Tweets count calculated for user ID: ' . $request->user()->id, [
+            'tweets_count' => $me['tweets_count']
+        ]);
+
+        Log::info('Returning profile response for user ID: ' . $request->user()->id);
 
         return response()->json($me);
     }
+
 
     /**
      * PUT /me
