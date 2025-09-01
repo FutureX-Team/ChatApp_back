@@ -21,6 +21,7 @@ class User extends Authenticatable
         'email',
         'password_hash',
         'avatar_url',
+        'google_id',
         'is_disabled',
         'dark_mode',
     ];

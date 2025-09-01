@@ -15,6 +15,7 @@ return new class extends Migration {
             $table->string('username', 50)->unique();
             $table->string('email')->unique();
             $table->string('password_hash'); // مطابق للنص
+            $table->string('google_id')->nullable()->unique();
             $table->enum('role', ['user', 'admin'])->default('user');
             $table->string('avatar_url')->nullable();
             $table->boolean('is_disabled')->default(false);
