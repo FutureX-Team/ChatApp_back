@@ -7,7 +7,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\PlaceController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\AdminController;
-
+use App\Http\Controllers\Auth\GoogleController;
 Route::get('/hello', fn() => 'Hello World');
 
 Route::post('/register', [UserAuthController::class, 'register']);
@@ -62,3 +62,8 @@ Route::middleware(['auth:sanctum', 'admin'])->prefix('admin')->group(function ()
     Route::get('/reports',            [AdminController::class, 'index']);
     Route::put('/reports/{id}', [AdminController::class, 'updateReport']);
 });
+
+
+
+Route::get('/auth/google', [GoogleController::class, 'redirect']);
+Route::get('/auth/google/callback', [GoogleController::class, 'callback']);
