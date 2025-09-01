@@ -8,29 +8,41 @@ use App\Models\Tweet;
 
 class ReportController extends Controller
 {
-      public function store(Request $request)
+    /**
+     * POST /reports
+     */
+    public function store(Request $request)
     {
-        $request->validate([
+        $data = $request->validate([
             'tweet_id' => 'required|exists:tweets,id',
             'reason'   => 'required|string|max:1000',
         ]);
 
-        // لا تسمح بالإبلاغ على تغريدته الخاصة (اختياري)
-        $tweet = Tweet::findOrFail($request->tweet_id);
+        // لا تسمح بالإبلاغ عن تغريدته الخاصة (اختياري)
+        $tweet = Tweet::findOrFail($data['tweet_id']);
         if ($tweet->user_id === $request->user()->id) {
-            return response()->json([
-                'message' => 'لا يمكنك الإبلاغ عن تغريدتك.'
-            ], 422);
+            return response()->json(['message' => 'لا يمكنك الإبلاغ عن تغريدتك.'], 422);
         }
 
+        // منع التكرار: لو فيه بلاغ سابق لنفس التغريدة من نفس المستخدم ولم يُغلق بعد
+        $alreadyOpen = Report::where('tweet_id', $data['tweet_id'])
+            ->where('user_id', $request->user()->id)
+            ->where('status', '!=', 'resolved')
+            ->exists();
+
+        if ($alreadyOpen) {
+            return response()->json(['message' => 'سبق وأن بلّغت عن هذه التغريدة ولم يُغلق البلاغ بعد.'], 409);
+        }
+
+        // الحالة الافتراضية pending (تأكد منها في الـ migration)
         $report = Report::create([
-            'tweet_id' => $request->tweet_id,
+            'tweet_id' => $data['tweet_id'],
             'user_id'  => $request->user()->id,
-            // الحالة افتراضياً pending من قاعدة البيانات
-            'reason'   => $request->reason,
+            'reason'   => $data['reason'],
+            'status'   => 'pending',
         ]);
 
-        // نرجع البلاغ مع التغريدة المرتبطة
+        // رجّع البلاغ مع التغريدة والناشر
         $report->load([
             'tweet:id,user_id,text,created_at',
             'tweet.user:id,username'
@@ -43,15 +55,14 @@ class ReportController extends Controller
     }
 
     /**
-     * GET /reports
-     * إظهار البلاغات التي أرسلتها (My Reports)
+     * GET /reports/mine
      */
-    public function mine(Request $request)
+    public function myReports(Request $request)
     {
         $reports = Report::with([
-                'tweet:id,user_id,text,created_at',
-                'tweet.user:id,username'
-            ])
+            'tweet:id,user_id,text,created_at',
+            'tweet.user:id,username'
+        ])
             ->where('user_id', $request->user()->id)
             ->orderByDesc('created_at')
             ->get();

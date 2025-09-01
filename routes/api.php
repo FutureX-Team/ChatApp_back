@@ -8,6 +8,8 @@ use App\Http\Controllers\PlaceController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\AdminController;
 
+Route::get('/hello', fn() => 'Hello World');
+
 Route::post('/register', [UserAuthController::class, 'register']);
 Route::post('/login', [UserAuthController::class, 'login']);
 
@@ -52,13 +54,11 @@ Route::middleware(['auth:sanctum'])->group(function () {
 | Admin (auth + role:admin)
 |--------------------------------------------------------------------------
 */
-Route::middleware(['auth:sanctum','admin'])->prefix('admin')->group(function () {
+Route::middleware(['auth:sanctum', 'admin'])->prefix('admin')->group(function () {
     Route::get('/dashboard', [AdminController::class, 'stats']);
     Route::put('/users/{id}/disable', [AdminController::class, 'disable']);
     Route::put('/users/{id}',         [AdminController::class, 'update']);
     Route::delete('/tweets/{id}',     [AdminController::class, 'destroy']);
     Route::get('/reports',            [AdminController::class, 'index']);
     Route::put('/reports/{id}', [AdminController::class, 'updateReport']);
-
 });
-
