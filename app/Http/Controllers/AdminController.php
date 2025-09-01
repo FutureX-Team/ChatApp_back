@@ -25,8 +25,8 @@ class AdminController extends Controller
         $lastMonthTweets = \App\Models\Tweet::where('created_at', '>=', Carbon::now()->subDays(30))->count();
         $lastWeekTweets  = \App\Models\Tweet::where('created_at', '>=', Carbon::now()->subDays(7))->count();
 
-        // إن لم يكن لديك نظام presence، ارجع 0 أو احسب من آخر نشاط خلال 5 دقائق
-        $onlineUsers = \App\Models\User::where('last_seen_at', '>=', Carbon::now()->subMinutes(5))->count();
+        // users created in the last 7 days
+        $lastWeekUsers = User::where('created_at', '>=', Carbon::now()->subDays(7))->count();
 
         return response()->json([
             'users_count'        => $usersCount,
@@ -34,9 +34,8 @@ class AdminController extends Controller
             'reports_count'      => $reportsCount,
             'registered_tweets'  => $registeredTweets,
             'guest_tweets'       => $guestTweets,
-            'last_month_tweets'  => $lastMonthTweets,
+            'last_week_users'    => $lastWeekUsers,
             'last_week_tweets'   => $lastWeekTweets,
-            'online_users'       => $onlineUsers,
         ]);
     }
 
