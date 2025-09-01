@@ -11,56 +11,54 @@ use Throwable;
 
 class GoogleController extends Controller
 {
-    public function redirect()
-    {
-        return Socialite::driver('google')->redirect();
-    }
+ public function redirect()
+{
+    return Socialite::driver('google')
+        ->scopes(['openid','email','profile'])
+        ->redirect();
+}
 
-    public function callback()
-    {
-        try {
-            // stateless() helps during dev when ports differ (SPA)
-            $g = Socialite::driver('google')->stateless()->user();
+public function callback()
+{
+    try {
+        $g = Socialite::driver('google')->stateless()->user();
 
-            $user = User::where('google_id', $g->getId())->first();
+        $email = $g->getEmail();
+        if (! $email) {
+            return redirect(config('app.frontend_url').'/login?error=no-email');
+        }
 
-            if (! $user) {
-                // If you allow merging by email:
-                $user = User::where('email', $g->getEmail())->first();
+        $user = User::where('google_id', $g->getId())->first()
+            ?? User::where('email', $email)->first();
 
-                if ($user) {
-                    $user->update([
-                        'google_id'  => $g->getId(),
-                        'avatar_url' => $g->getAvatar(),
-                    ]);
-                } else {
-                    // Your schema uses username + password_hash (nullable)
-                    $username = Str::slug(explode('@', $g->getEmail())[0]);
-                    // ensure unique username
-                    $base = $username; $i = 1;
-                    while (User::where('username', $username)->exists()) {
-                        $username = $base.'-'.$i++;
-                    }
-
-                    $user = User::create([
-                        'username'    => $username,
-                        'email'       => $g->getEmail(),
-                        'google_id'   => $g->getId(),
-                        'avatar_url'  => $g->getAvatar(),
-                        'password_hash' => null, 
-                    ]);
-                }
+        if (! $user) {
+            $base = Str::slug(Str::before($email, '@')) ?: 'user';
+            $username = $base;
+            for ($i = 1; User::where('username', $username)->exists(); $i++) {
+                $username = "{$base}-{$i}";
             }
 
-            Auth::login($user, remember: true);
-
-            // Send back to your SPA; session cookie is already set
-            $frontend = config('app.frontend_url', env('FRONTEND_URL', 'http://localhost:5173'));
-            return redirect($frontend . '/auth/callback?ok=1');
-
-        } catch (Throwable $th) {
-            report($th);
-            return redirect((env('FRONTEND_URL') ?: '/') . '/login?error=google');
+            $user = User::create([
+                'username' => $username,
+                'email' => $email,
+                'google_id' => $g->getId(),
+                'avatar_url' => $g->getAvatar(),
+                'password' => null,
+            ]);
+        } else {
+            $user->update([
+                'google_id' => $g->getId(),
+                'avatar_url' => $g->getAvatar(),
+            ]);
         }
+
+        Auth::login($user, remember: true);
+
+        return redirect(config('app.frontend_url', env('FRONTEND_URL','/')).'/auth/callback?ok=1');
+
+    } catch (\Throwable $th) {
+        report($th);
+        return redirect(config('app.frontend_url', env('FRONTEND_URL','/')).'/login?error=google');
     }
+}
 }
