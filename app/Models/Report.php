@@ -3,17 +3,18 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Report extends Model
 {
     protected $fillable = ['tweet_id', 'user_id', 'reason', 'status'];
 
-    public function tweet()
+    public function tweet(): BelongsTo
     {
         return $this->belongsTo(Tweet::class);
     }
 
-    public function user()
+    public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
