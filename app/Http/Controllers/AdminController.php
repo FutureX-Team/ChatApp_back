@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use App\Models\User;
 use App\Models\Tweet;
@@ -11,22 +10,21 @@ use App\Models\Report;
 
 class AdminController extends Controller
 {
-    // GET /admin/stats
+    /** Allowed enum values for reports.status */
+    private const STATUSES = ['pending','reviewed','resolved'];
+
+    // GET /admin/dashboard
     public function stats()
     {
-        $usersCount   = \App\Models\User::count();
-        $tweetsCount  = \App\Models\Tweet::count();
-        $reportsCount = \App\Models\Report::count();
+        $usersCount   = User::count();
+        $tweetsCount  = Tweet::count();
+        $reportsCount = Report::count();
 
-        // اعتبر أن تغريدة الزائر user_id = null
-        $registeredTweets = \App\Models\Tweet::whereNotNull('user_id')->count();
-        $guestTweets      = \App\Models\Tweet::whereNull('user_id')->count();
+        $registeredTweets = Tweet::whereNotNull('user_id')->count();
+        $guestTweets      = Tweet::whereNull('user_id')->count();
 
-        $lastMonthTweets = \App\Models\Tweet::where('created_at', '>=', Carbon::now()->subDays(30))->count();
-        $lastWeekTweets  = \App\Models\Tweet::where('created_at', '>=', Carbon::now()->subDays(7))->count();
-
-        // users created in the last 7 days
-        $lastWeekUsers = User::where('created_at', '>=', Carbon::now()->subDays(7))->count();
+        $lastWeekTweets  = Tweet::where('created_at', '>=', Carbon::now()->subDays(7))->count();
+        $lastWeekUsers   = User::where('created_at', '>=', Carbon::now()->subDays(7))->count();
 
         return response()->json([
             'users_count'        => $usersCount,
@@ -39,7 +37,7 @@ class AdminController extends Controller
         ]);
     }
 
-    // PUT /admin/users/{id}/toggle
+    // PUT /admin/users/{id}/disable
     public function disable($id)
     {
         $user = User::findOrFail($id);
@@ -70,37 +68,40 @@ class AdminController extends Controller
     public function destroy($id)
     {
         $tweet = Tweet::findOrFail($id);
-        // تأكد أن علاقات الردود تمسح كاسكيد في المايجريشن، أو احذفها يدويًا قبل الحذف
         $tweet->delete();
-
         return response()->json(['message' => 'Tweet deleted successfully']);
     }
 
-    // GET /admin/reports?status=new|reviewing|resolved
+    // GET /admin/reports?status=pending|reviewed|resolved
     public function index(Request $request)
     {
-        $q = Report::query()->with([
-            'tweet:id,text,user_id,created_at',
-            'user:id,username,email',
-        ])->orderBy('created_at', 'desc');
+        $q = Report::with([
+                'tweet:id,text,user_id,created_at',
+                'user:id,username,email',
+            ])
+            ->latest('id');
 
-        if ($status = $request->query('status')) {
+        if ($request->filled('status')) {
+            $status = $request->string('status')->toString();
+            if (! in_array($status, self::STATUSES, true)) {
+                return response()->json(['message' => 'Invalid status'], 422);
+            }
             $q->where('status', $status);
         }
 
-        // ترجع { data, links, meta } مريحة للفرونت
+        // returns { data, links, meta }
         return response()->json($q->paginate(20));
     }
 
     // PUT /admin/reports/{id}
     public function updateReport(Request $request, $id)
     {
+        $data = $request->validate([
+            'status' => 'required|in:' . implode(',', self::STATUSES),
+        ]);
+
         $report = Report::findOrFail($id);
-
-        $validated = $request->validate(['status' => 'required|in:pending,reviewed,resolved']);
-
-
-        $report->status = $validated['status'];
+        $report->status = $data['status'];
         $report->save();
 
         return response()->json(['message' => 'Report updated successfully', 'report' => $report]);
