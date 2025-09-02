@@ -118,6 +118,9 @@ return [
     |
     */
 
+    'frontend_url' => env('FRONTEND_URL', '/'),
+
+
     'maintenance' => [
         'driver' => env('APP_MAINTENANCE_DRIVER', 'file'),
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
