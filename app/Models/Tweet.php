@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 class Tweet extends Model
 {
     use HasFactory;
+
+    // نوقف updated_at فقط، ونترك created_at يعمل تلقائياً
     const UPDATED_AT = null;
 
     protected $fillable = [
@@ -19,31 +21,26 @@ class Tweet extends Model
         'down_count',
     ];
 
-    // صاحب التغريدة
     public function user()
     {
         return $this->belongsTo(User::class);
     }
 
-    // الردود على التغريدة
     public function replies()
     {
         return $this->hasMany(Tweet::class, 'reply_to_tweet_id');
     }
 
-    // لو التغريدة نفسها رد على تغريدة ثانية
     public function parent()
     {
         return $this->belongsTo(Tweet::class, 'reply_to_tweet_id');
     }
 
-    // المكان المرتبط بالتغريدة (اختياري)
     public function place()
     {
         return $this->belongsTo(Place::class);
     }
 
-    // البلاغات المرتبطة بالتغريدة
     public function reports()
     {
         return $this->hasMany(Report::class);
