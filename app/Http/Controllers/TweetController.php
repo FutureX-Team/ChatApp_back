@@ -52,22 +52,28 @@ class TweetController extends Controller
     // إنشاء تغريدة جديدة
     public function store(Request $request)
     {
-        $request->validate([
+        if (!$request->user()) {
+            return response()->json(['message' => 'Unauthenticated'], 401);
+        }
+
+        $data = $request->validate([
             'text' => 'required|string|max:280',
-            'place_id' => 'nullable|exists:places,id'
+            'place_id' => 'nullable|exists:places,id',
+            'reply_to_tweet_id' => 'nullable|exists:tweets,id',
         ]);
 
         $tweet = Tweet::create([
-            'user_id' => $request->user()->id,
-            'text'    => $request->text,
-            'place_id'=> $request->place_id,
+            'user_id' => $request->user()->id,   // من المستخدم المصادَق
+            'text'    => $data['text'],
+            'place_id' => $data['place_id'] ?? null,
+            'reply_to_tweet_id' => $data['reply_to_tweet_id'] ?? null,
+            'up_count' => 0,
+            'down_count' => 0,
         ]);
 
-        return response()->json([
-            'message' => 'Tweet created successfully',
-            'tweet'   => $tweet
-        ], 201);
+        return response()->json(['tweet' => $tweet], 201);
     }
+
 
     // حذف تغريدة (لصاحبها فقط)
     public function destroy(Request $request, $id)
