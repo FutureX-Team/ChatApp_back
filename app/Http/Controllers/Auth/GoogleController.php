@@ -33,27 +33,28 @@ class GoogleController extends Controller
             $user = User::where('google_id', $g->getId())->first()
                 ?? User::where('email', $email)->first();
 
-            if (! $user) {
-                $base = Str::slug(Str::before($email, '@')) ?: 'user';
-                $username = $base;
-                for ($i = 1; User::where('username', $username)->exists(); $i++) {
-                    $username = "{$base}-{$i}";
-                }
+if (! $user) {
+    $base = Str::slug(Str::before($email, '@')) ?: 'user';
+    $username = $base;
+    for ($i = 1; User::where('username', $username)->exists(); $i++) {
+        $username = "{$base}-{$i}";
+    }
 
-                $user = User::create([
-                    'username'   => $username,
-                    'email'      => $email,
-                    'name'       => $g->getName() ?: $username,
-                    'google_id'  => $g->getId(),
-                    'avatar_url' => $g->getAvatar(),
-                    'password'   => Hash::make(Str::random(32)), // do NOT store null unless column is nullable
-                ]);
-            } else {
-                $user->update([
-                    'google_id'  => $g->getId(),
-                    'avatar_url' => $g->getAvatar(),
-                ]);
-            }
+    $user = User::create([
+        'username'      => $username,
+        'email'         => $email,
+        'google_id'     => $g->getId(),
+        'avatar_url'    => $g->getAvatar(),
+        'password_hash' => Hash::make(Str::random(32)), // important!
+    ]);
+} else {
+    $user->update([
+        'google_id'  => $g->getId(),
+        'avatar_url' => $g->getAvatar(),
+    ]);
+}
+
+
 
             // Mint a token for your SPA
             $token = $user->createToken('web')->plainTextToken;
