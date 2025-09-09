@@ -68,7 +68,14 @@ class UserController extends Controller
         Log::info('Me endpoint called for user ID: ' . $request->user()->id);
 
         $me = $request->user()->only([
-            'id', 'username', 'email', 'avatar_url', 'dark_mode', 'is_disabled', 'role', 'created_at',
+            'id',
+            'username',
+            'email',
+            'avatar_url',
+            'dark_mode',
+            'is_disabled',
+            'role',
+            'created_at',
         ]);
         Log::info('User basic info fetched', $me);
 
@@ -93,12 +100,12 @@ class UserController extends Controller
         $user = $request->user();
 
         $request->validate([
-            'username'   => ['sometimes','string','max:50', Rule::unique('users','username')->ignore($user->id)],
-            'email'      => ['sometimes','email','max:255', Rule::unique('users','email')->ignore($user->id)],
-            'avatar_url' => ['nullable','string','max:255'],
-            'dark_mode'  => ['sometimes','boolean'],
+            'username'   => ['sometimes', 'string', 'max:50', Rule::unique('users', 'username')->ignore($user->id)],
+            'email'      => ['sometimes', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+            'avatar_url' => ['nullable', 'string', 'max:500'],
+            'dark_mode'  => ['sometimes', 'boolean'],
             // إن حاب تضيف تأكيد كلمة المرور: أرسل password_confirmation مع الطلب وأضف 'confirmed'
-            'password'   => ['sometimes','string','min:8'],
+            'password'   => ['sometimes', 'string', 'min:8'],
         ]);
 
         if ($request->filled('username'))   $user->username   = $request->username;
@@ -107,14 +114,14 @@ class UserController extends Controller
         if ($request->has('dark_mode'))     $user->dark_mode  = (bool) $request->dark_mode;
 
         if ($request->filled('password')) {
-            $user->password = bcrypt($request->password);
+            $user->password_hash = bcrypt($request->password);
         }
 
         $user->save();
 
         return response()->json([
             'message' => 'Profile updated successfully',
-            'user'    => $user->only(['id','username','email','avatar_url','dark_mode','is_disabled','role','created_at']),
+            'user'    => $user->only(['id', 'username', 'email', 'avatar_url', 'dark_mode', 'is_disabled', 'role', 'created_at']),
         ]);
     }
 }

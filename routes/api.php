@@ -8,6 +8,8 @@ use App\Http\Controllers\PlaceController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\Auth\GoogleController;
+use App\Http\Controllers\SupportTicketController;
+
 Route::get('/hello', fn() => 'Hello World');
 
 Route::post('/register', [UserAuthController::class, 'register']);
@@ -32,6 +34,9 @@ Route::get('/places', [PlaceController::class, 'index']);
 */
 Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/logout', [UserAuthController::class, 'logout']);
+    // Support Tickets
+    Route::post('/support', [SupportTicketController::class, 'store']);
+
 
     // Me
     Route::get('/me', [UserController::class, 'me']);
@@ -55,6 +60,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 |--------------------------------------------------------------------------
 */
 Route::middleware(['auth:sanctum', 'admin'])->prefix('admin')->group(function () {
+    Route::get('/support', [SupportTicketController::class, 'index']);
     Route::get('/dashboard', [AdminController::class, 'stats']);
     Route::put('/users/{id}/disable', [AdminController::class, 'disable']);
     Route::put('/users/{id}',         [AdminController::class, 'update']);

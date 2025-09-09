@@ -11,6 +11,7 @@ return [
     'allowed_origins' => [
         'https://chat.futurex.azzamkh.sa',
         'http://localhost:5173',
+        'http://localhost:3000',
         // production Vercel domain (short canonical)
         'https://chat-app-front-olive.vercel.app',
     ],

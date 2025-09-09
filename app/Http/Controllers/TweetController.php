@@ -10,18 +10,21 @@ class TweetController extends Controller
     // قائمة التغريدات
     public function index()
     {
-        $tweets = Tweet::with('user:id,username,avatar_url')
-            ->latest('id')
-            ->get(['id','user_id','text','place_id','reply_to_tweet_id','up_count','down_count','created_at']);
-
+        $tweets = \App\Models\Tweet::query()
+            ->with(['user:id,username,avatar_url'])
+            ->withCount('replies') // <-- يضيف replies_count تلقائياً
+            ->orderByDesc('created_at')
+            ->paginate(20);
         // ارجع المصفوفة مباشرة (frontend يتوقع object/list بدون تغليف)
         return response()->json($tweets);
     }
 
     // فلترة التغريدات
+    // فلترة التغريدات
     public function filter(Request $request)
     {
-        $q = Tweet::with('user:id,username,avatar_url');
+        $q = Tweet::with('user:id,username,avatar_url')
+            ->withCount(['replies as replies_count']); // ← أضِفها هنا
 
         if ($request->filled('place_id')) {
             $q->where('place_id', $request->integer('place_id'));
@@ -35,21 +38,32 @@ class TweetController extends Controller
             $q->latest('id');
         }
 
-        $tweets = $q->get(['id','user_id','text','place_id','reply_to_tweet_id','up_count','down_count','created_at']);
+        // لا تحط replies_count في select؛ withCount يضيفه تلقائيًا
+        $tweets = $q->get([
+            'id',
+            'user_id',
+            'text',
+            'place_id',
+            'reply_to_tweet_id',
+            'up_count',
+            'down_count',
+            'created_at'
+        ]);
+
         return response()->json($tweets);
     }
+
 
     // تغريدة واحدة + الردود
     public function show($id)
     {
         $tweet = Tweet::with([
             'user:id,username,avatar_url',
-            'replies' => function ($q) {
-                $q->with('user:id,username,avatar_url')
-                  ->latest('id')
-                  ->select(['id','user_id','text','place_id','reply_to_tweet_id','up_count','down_count','created_at']);
-            },
-        ])->findOrFail($id, ['id','user_id','text','place_id','reply_to_tweet_id','up_count','down_count','created_at']);
+            'replies' => fn($q) => $q->with('user:id,username,avatar_url')
+                ->latest('id')
+                ->select(['id', 'user_id', 'text', 'place_id', 'reply_to_tweet_id', 'up_count', 'down_count', 'created_at']),
+        ])->withCount(['replies as replies_count'])
+            ->findOrFail($id, ['id', 'user_id', 'text', 'place_id', 'reply_to_tweet_id', 'up_count', 'down_count', 'created_at']);
 
         // اختياري: عدّاد الردود ليساعد الواجهة
         $tweet->setAttribute('replies_count', $tweet->replies->count());
@@ -65,9 +79,9 @@ class TweetController extends Controller
         }
 
         $data = $request->validate([
-            'text' => ['required','string','max:280'],
-            'place_id' => ['nullable','exists:places,id'],
-            'reply_to_tweet_id' => ['nullable','exists:tweets,id'],
+            'text' => ['required', 'string', 'max:280'],
+            'place_id' => ['nullable', 'exists:places,id'],
+            'reply_to_tweet_id' => ['nullable', 'exists:tweets,id'],
         ]);
 
         $tweet = Tweet::create([
@@ -106,7 +120,7 @@ class TweetController extends Controller
             return response()->json(['message' => 'Unauthenticated'], 401);
         }
 
-        $request->validate(['text' => ['required','string','max:280']]);
+        $request->validate(['text' => ['required', 'string', 'max:280']]);
 
         $parent = Tweet::findOrFail($id);
 
