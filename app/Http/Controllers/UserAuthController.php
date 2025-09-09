@@ -7,44 +7,45 @@ use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 
-
 class UserAuthController extends Controller
 {
-
-    // register
+    // POST /api/register
     public function register(Request $request)
     {
-        // 422 يُرجع تلقائيًا ValidationException ما تحتاج try/catch
+        $start = microtime(true);
+
+        // لا تسجّل كلمة المرور أبداً
+        Log::info('AUTH.REGISTER start', [
+            'ip'         => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'username'   => $request->input('username'),
+            'email'      => $request->input('email'),
+        ]);
+
         $data = $request->validate([
             'username' => 'required|string|max:50|unique:users,username',
             'email'    => 'required|string|email:rfc,dns|max:255|unique:users,email',
             'password' => 'required|string|min:8',
-        ], [
-            'username.required' => 'Username is required',
-            'username.unique'   => 'This username is already taken',
-            'email.required'    => 'Email is required',
-            'email.unique'      => 'This email is already registered',
-            'password.required' => 'Password is required',
-            'password.min'      => 'Password must be at least 8 characters',
         ]);
-        Log::info('Register request validated', $data);
-
 
         $user = new User();
         $user->username      = $data['username'];
         $user->email         = $data['email'];
         $user->password_hash = Hash::make($data['password']);
-
         $user->save();
 
-        Log::info('User created with ID: ' . $user->id);
+        Log::info('AUTH.REGISTER user_created', ['user_id' => $user->id]);
 
-        // لو تستخدم Sanctum (كوكيز)، دخول تلقائي بعد التسجيل
-
+        // أنشئ توكن (لا تسجّل قيمته في اللوق)
         $token = $user->createToken('auth_token')->plainTextToken;
-        Log::info('Token generated for user ID: ' . $user->id);
+
+        Log::info('AUTH.REGISTER success', [
+            'user_id'     => $user->id,
+            'duration_ms' => round((microtime(true) - $start) * 1000, 2),
+        ]);
+
         return response()->json([
-            'token'  => $token,
+            'token'   => $token,
             'message' => 'User registered successfully',
             'user'    => [
                 'id'       => $user->id,
@@ -53,33 +54,45 @@ class UserAuthController extends Controller
             ],
         ], 201);
     }
+
     // POST /api/login
     public function login(Request $request)
     {
+        $start = microtime(true);
+
+        Log::info('AUTH.LOGIN start', [
+            'ip'         => $request->ip(),
+            'user_agent' => $request->userAgent(),
+            'email'      => $request->input('email'),
+        ]);
+
         $data = $request->validate([
             'email'    => 'required|email',
             'password' => 'required|string',
         ]);
-        Log::info('Login attempt with email: ' . $data['email']);
-
 
         $user = User::where('email', $data['email'])->first();
         if (!$user) {
-            Log::error('Login failed - user not found for email: ' . $data['email']);
+            Log::warning('AUTH.LOGIN user_not_found', ['email' => $data['email']]);
             return response()->json(['message' => 'User not found'], 404);
         }
+
         if (!Hash::check($data['password'], $user->password_hash)) {
-            Log::warning('Login failed - wrong password for user ID: ' . $user->id);
+            Log::warning('AUTH.LOGIN wrong_password', ['user_id' => $user->id]);
             return response()->json(['message' => 'Wrong password'], 401);
         }
-        // إنشاء توكن جديد
+
         $token = $user->createToken('auth_token')->plainTextToken;
-        Log::info('Login successful for user ID: ' . $user->id);
+
+        Log::info('AUTH.LOGIN success', [
+            'user_id'     => $user->id,
+            'duration_ms' => round((microtime(true) - $start) * 1000, 2),
+        ]);
 
         return response()->json([
-            'token' => $token,
+            'token'   => $token,
             'message' => 'Logged in',
-            'user' => [
+            'user'    => [
                 'id'       => $user->id,
                 'username' => $user->username,
                 'email'    => $user->email,
@@ -88,16 +101,32 @@ class UserAuthController extends Controller
         ]);
     }
 
-    // POST /api/logout (No benefit without session) (ما في فايدة بدون جلسة)
+    // POST /api/logout
     public function logout(Request $request)
     {
-        // Revoke the token that was used to authenticate the current request
-        $request->user()->currentAccessToken()->delete();
-        Log::info('Logout request for user ID: ' . $request->user()->id);
+        $start = microtime(true);
+        $uid   = optional($request->user())->id;
 
-        Log::info('Token revoked for user ID: ' . $request->user()->id);
+        Log::info('AUTH.LOGOUT start', [
+            'user_id'    => $uid,
+            'ip'         => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
+
+        // تحقّق من وجود توكن حالي قبل الحذف
+        $token = $request->user()?->currentAccessToken();
+        if ($token) {
+            $token->delete();
+            Log::info('AUTH.LOGOUT token_revoked', ['user_id' => $uid]);
+        } else {
+            Log::warning('AUTH.LOGOUT no_current_token', ['user_id' => $uid]);
+        }
+
+        Log::info('AUTH.LOGOUT success', [
+            'user_id'     => $uid,
+            'duration_ms' => round((microtime(true) - $start) * 1000, 2),
+        ]);
+
         return response()->json(['message' => 'Logged out successfully']);
     }
-
-
 }
