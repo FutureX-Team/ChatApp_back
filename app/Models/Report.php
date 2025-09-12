@@ -11,11 +11,11 @@ class Report extends Model
 
     public function tweet(): BelongsTo
     {
-        return $this->belongsTo(Tweet::class);
+        return $this->belongsTo(Tweet::class, 'tweet_id');
     }
 
     public function user(): BelongsTo
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class, 'user_id');
     }
 }

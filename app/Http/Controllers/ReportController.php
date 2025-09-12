@@ -22,7 +22,7 @@ class ReportController extends Controller
         }
 
         $data = $request->validate([
-            'tweet_id' => 'required|integer|exists:tweets,id',
+            'tweet_id' => 'required|uuid|exists:tweets,id',
             'reason'   => 'required|string|max:1000',
         ]);
 

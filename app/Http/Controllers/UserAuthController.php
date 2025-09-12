@@ -1,11 +1,12 @@
 <?php
 
+
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\User;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\{Hash, Log, RateLimiter};
+use Illuminate\Support\Str;
 
 class UserAuthController extends Controller
 {
@@ -14,7 +15,6 @@ class UserAuthController extends Controller
     {
         $start = microtime(true);
 
-        // لا تسجّل كلمة المرور أبداً
         Log::info('AUTH.REGISTER start', [
             'ip'         => $request->ip(),
             'user_agent' => $request->userAgent(),
@@ -28,15 +28,18 @@ class UserAuthController extends Controller
             'password' => 'required|string|min:8',
         ]);
 
+        // NEW: تطبيع
+        $email    = mb_strtolower(trim($data['email']));
+        $username = trim($data['username']);
+
         $user = new User();
-        $user->username      = $data['username'];
-        $user->email         = $data['email'];
+        $user->username      = $username;
+        $user->email         = $email;
         $user->password_hash = Hash::make($data['password']);
         $user->save();
 
         Log::info('AUTH.REGISTER user_created', ['user_id' => $user->id]);
 
-        // أنشئ توكن (لا تسجّل قيمته في اللوق)
         $token = $user->createToken('auth_token')->plainTextToken;
 
         Log::info('AUTH.REGISTER success', [
@@ -56,31 +59,53 @@ class UserAuthController extends Controller
     }
 
     // POST /api/login
+    // POST /api/login
     public function login(Request $request)
     {
         $start = microtime(true);
-
-        Log::info('AUTH.LOGIN start', [
-            'ip'         => $request->ip(),
-            'user_agent' => $request->userAgent(),
-            'email'      => $request->input('email'),
-        ]);
 
         $data = $request->validate([
             'email'    => 'required|email',
             'password' => 'required|string',
         ]);
 
-        $user = User::where('email', $data['email'])->first();
+        // NEW: تطبيع الإيميل + Rate Limiter
+        $email = mb_strtolower(trim($data['email']));
+        $ip    = $request->ip();
+        $key   = 'login:' . sha1($email . '|' . $ip);
+
+        if (RateLimiter::tooManyAttempts($key, 5)) {
+            $secs = RateLimiter::availableIn($key);
+            Log::warning('AUTH.LOGIN locked_out', ['email' => $email, 'ip' => $ip, 'retry_after' => $secs]);
+            return response()->json(['message' => 'Too many attempts. Try again later.', 'retry_after' => $secs], 429);
+        }
+
+        Log::info('AUTH.LOGIN start', [
+            'ip'         => $ip,
+            'user_agent' => $request->userAgent(),
+            'email'      => $email,
+        ]);
+
+        $user = User::where('email', $email)->first();
         if (!$user) {
-            Log::warning('AUTH.LOGIN user_not_found', ['email' => $data['email']]);
+            RateLimiter::hit($key, 60);
+            Log::warning('AUTH.LOGIN user_not_found', ['email' => $email]);
             return response()->json(['message' => 'User not found'], 404);
         }
 
+        // NEW: فحص تعليق الحساب (لن يكسر لو العمود غير موجود)
+        if (isset($user->is_suspended) && $user->is_suspended) {
+            Log::warning('AUTH.LOGIN suspended', ['user_id' => $user->id]);
+            return response()->json(['message' => 'Account suspended'], 423);
+        }
+
         if (!Hash::check($data['password'], $user->password_hash)) {
+            RateLimiter::hit($key, 60);
             Log::warning('AUTH.LOGIN wrong_password', ['user_id' => $user->id]);
             return response()->json(['message' => 'Wrong password'], 401);
         }
+
+        RateLimiter::clear($key);
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
@@ -113,8 +138,12 @@ class UserAuthController extends Controller
             'user_agent' => $request->userAgent(),
         ]);
 
-        // تحقّق من وجود توكن حالي قبل الحذف
-        $token = $request->user()?->currentAccessToken();
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['message' => 'Not authenticated'], 401);
+        }
+
+        $token = $user->currentAccessToken();
         if ($token) {
             $token->delete();
             Log::info('AUTH.LOGOUT token_revoked', ['user_id' => $uid]);

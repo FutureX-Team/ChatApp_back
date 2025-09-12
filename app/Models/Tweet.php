@@ -8,7 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 class Tweet extends Model
 {
     use HasFactory;
-
+    protected $keyType = 'string';
+    public $incrementing = false;
     // نوقف updated_at فقط، ونترك created_at يعمل تلقائياً
     const UPDATED_AT = null;
 
@@ -23,7 +24,7 @@ class Tweet extends Model
 
     public function user()
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class, 'user_id');
     }
 
     public function replies()

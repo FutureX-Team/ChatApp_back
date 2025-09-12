@@ -13,22 +13,22 @@ return new class extends Migration {
         Schema::create('tweets', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')
-                  ->constrained('users')
-                  ->cascadeOnDelete(); // ON DELETE CASCADE
+                ->constrained('users')
+                ->cascadeOnDelete(); // ON DELETE CASCADE
 
             $table->string('text', 280);
             $table->foreignId('place_id')
-                  ->nullable()
-                  ->constrained('places')
-                  ->nullOnDelete(); // ON DELETE SET NULL
+                ->nullable()
+                ->constrained('places')
+                ->nullOnDelete(); // ON DELETE SET NULL
 
             $table->integer('up_count')->default(0);
             $table->integer('down_count')->default(0);
 
             $table->foreignId('reply_to_tweet_id')
-                  ->nullable()
-                  ->constrained('tweets')
-                  ->nullOnDelete(); // ON DELETE SET NULL
+                ->nullable()
+                ->constrained('tweets')
+                ->nullOnDelete(); // ON DELETE SET NULL
 
             $table->timestamp('created_at')->useCurrent();
 

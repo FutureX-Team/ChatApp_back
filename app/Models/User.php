@@ -5,16 +5,20 @@ namespace App\Models;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use Illuminate\Support\Str;
 
 class User extends Authenticatable
 {
-    use Notifiable;
-    use HasApiTokens;
+    use Notifiable, HasApiTokens;
 
     protected $table = 'users';
 
-    // جدولك لا يحتوي updated_at (فقط created_at بـ DEFAULT CURRENT_TIMESTAMP)
+    // ما عندك updated_at، فقط created_at من الداتا بيس
     public $timestamps = false;
+
+    // UUID
+    protected $keyType = 'string';
+    public $incrementing = false;
 
     protected $fillable = [
         'username',
@@ -24,12 +28,12 @@ class User extends Authenticatable
         'google_id',
         'is_disabled',
         'dark_mode',
+        'created_at', // لو عندك DEFAULT CURRENT_TIMESTAMP عادي تبقيها
     ];
 
     protected $hidden = [
         'password_hash',
-        // ما عندك remember_token بالجدول، تركه هنا لا يضر لأنه غير موجود فعليًا
-        'remember_token',
+        'remember_token', // وجوده هنا ما يضر حتى لو العمود غير موجود
     ];
 
     protected $casts = [
@@ -38,9 +42,24 @@ class User extends Authenticatable
         'created_at'  => 'datetime',
     ];
 
-    // مهم: خلي Laravel يستخدم عمود password_hash عند التحقق من كلمة المرور
+    // Laravel يستخدم password_hash بدلاً من password
     public function getAuthPassword()
     {
         return $this->password_hash;
+    }
+
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($model) {
+            if (!$model->getKey()) {
+                $model->{$model->getKeyName()} = (string) Str::uuid();
+            }
+            // لو تبغى تضمن created_at عند الإنشاء (بما إن timestamps=false)
+            if (!$model->created_at) {
+                $model->created_at = now();
+            }
+        });
     }
 }

@@ -19,7 +19,8 @@ class TweetController extends Controller
         $tweets = Tweet::query()
             ->with(['user:id,username,avatar_url'])
             ->withCount('replies')
-            ->orderByDesc('created_at')
+            ->latest('created_at')      // ← ترتيب بحسب التاريخ تنازلي
+            ->orderByDesc('id')         // ← كسر تعادل لو نفس الدقيقة/الثانية
             ->paginate(20);
 
         Log::info('TWEETS.INDEX done', [
@@ -33,6 +34,7 @@ class TweetController extends Controller
     }
 
     // فلترة التغريدات
+    // filter(): تأكدنا من القراءة الصحيحة لـ sort ورتّبنا الأحدث أولاً افتراضياً
     public function filter(Request $request)
     {
         $start = microtime(true);
@@ -45,15 +47,17 @@ class TweetController extends Controller
             ->withCount(['replies as replies_count']);
 
         if ($request->filled('place_id')) {
-            $q->where('place_id', $request->integer('place_id'));
+            $q->where('place_id', (int) $request->input('place_id'));
         }
 
-        if ($request->filled('sort')) {
-            $request->string('sort') === 'popular'
-                ? $q->orderByDesc('up_count')
-                : $q->latest('id');
+        $sort = $request->input('sort'); // ← بدل string() إلى input()
+        if ($sort === 'popular') {
+            $q->orderByDesc('up_count')
+                ->orderByDesc('created_at')
+                ->orderByDesc('id');
         } else {
-            $q->latest('id');
+            $q->latest('created_at')
+                ->orderByDesc('id');
         }
 
         $tweets = $q->get([
@@ -75,6 +79,7 @@ class TweetController extends Controller
         return response()->json($tweets);
     }
 
+
     // تغريدة واحدة + الردود
     public function show($id)
     {
@@ -84,7 +89,7 @@ class TweetController extends Controller
         $tweet = Tweet::with([
             'user:id,username,avatar_url',
             'replies' => fn($q) => $q->with('user:id,username,avatar_url')
-                ->latest('id')
+                ->latest('created_at')
                 ->select(['id', 'user_id', 'text', 'place_id', 'reply_to_tweet_id', 'up_count', 'down_count', 'created_at']),
         ])->withCount(['replies as replies_count'])
             ->findOrFail($id, ['id', 'user_id', 'text', 'place_id', 'reply_to_tweet_id', 'up_count', 'down_count', 'created_at']);
@@ -111,16 +116,22 @@ class TweetController extends Controller
             return response()->json(['message' => 'Unauthenticated'], 401);
         }
 
-        Log::info('TWEETS.STORE validate', [
-            'user_id' => $uid,
-            'keys'    => array_keys($request->all()),
-        ]);
-
         $data = $request->validate([
             'text' => ['required', 'string', 'max:280'],
             'place_id' => ['nullable', 'exists:places,id'],
             'reply_to_tweet_id' => ['nullable', 'exists:tweets,id'],
         ]);
+
+        // 👇 التحقق من عدد التغريدات خلال آخر دقيقة
+        $recentCount = Tweet::where('user_id', $uid)
+            ->where('created_at', '>=', now()->subMinute())
+            ->count();
+
+        if ($recentCount > 2) {
+            return response()->json([
+                'message' => 'لا يمكنك نشر أكثر من تغريدتين في الدقيقة الواحدة'
+            ], 429); // 429 Too Many Requests
+        }
 
         $tweet = Tweet::create([
             'user_id' => $uid,
@@ -142,6 +153,7 @@ class TweetController extends Controller
 
         return response()->json($tweet, 201);
     }
+
 
     // حذف تغريدة
     public function destroy(Request $request, $id)
