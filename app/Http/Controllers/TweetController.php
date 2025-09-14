@@ -6,6 +6,11 @@ use Illuminate\Http\Request;
 use App\Models\Tweet;
 use Illuminate\Support\Facades\Log;
 
+// إضافات بسيطة مطلوبة للتايب هنـتس واستخدام الـ UUID
+use App\Models\User;
+use App\Models\Guest;
+use Illuminate\Support\Str;
+
 class TweetController extends Controller
 {
     // قائمة التغريدات
@@ -17,7 +22,10 @@ class TweetController extends Controller
         ]);
 
         $tweets = Tweet::query()
-            ->with(['user:id,username,avatar_url'])
+            ->with([
+                'user:id,username,avatar_url',
+                'guest:id,nickname',                // <-- مهم للضيف
+            ])
             ->withCount('replies')
             ->latest('created_at')      // ← ترتيب بحسب التاريخ تنازلي
             ->orderByDesc('id')         // ← كسر تعادل لو نفس الدقيقة/الثانية
@@ -34,7 +42,6 @@ class TweetController extends Controller
     }
 
     // فلترة التغريدات
-    // filter(): تأكدنا من القراءة الصحيحة لـ sort ورتّبنا الأحدث أولاً افتراضياً
     public function filter(Request $request)
     {
         $start = microtime(true);
@@ -43,14 +50,17 @@ class TweetController extends Controller
             'sort'     => $request->input('sort'),
         ]);
 
-        $q = Tweet::with('user:id,username,avatar_url')
+        $q = Tweet::with([
+                'user:id,username,avatar_url',
+                'guest:id,nickname',                // <-- مهم للضيف
+            ])
             ->withCount(['replies as replies_count']);
 
         if ($request->filled('place_id')) {
             $q->where('place_id', (int) $request->input('place_id'));
         }
 
-        $sort = $request->input('sort'); // ← بدل string() إلى input()
+        $sort = $request->input('sort');
         if ($sort === 'popular') {
             $q->orderByDesc('up_count')
                 ->orderByDesc('created_at')
@@ -63,6 +73,7 @@ class TweetController extends Controller
         $tweets = $q->get([
             'id',
             'user_id',
+            'guest_id',                               // <-- نرجّعه للفرونت
             'text',
             'place_id',
             'reply_to_tweet_id',
@@ -79,7 +90,6 @@ class TweetController extends Controller
         return response()->json($tweets);
     }
 
-
     // تغريدة واحدة + الردود
     public function show($id)
     {
@@ -88,11 +98,16 @@ class TweetController extends Controller
 
         $tweet = Tweet::with([
             'user:id,username,avatar_url',
-            'replies' => fn($q) => $q->with('user:id,username,avatar_url')
+            'guest:id,nickname', // <-- للمالك لو كان ضيف
+            'replies' => fn($q) => $q
+                ->with([
+                    'user:id,username,avatar_url',
+                    'guest:id,nickname', // <-- ردود ضيوف
+                ])
                 ->latest('created_at')
-                ->select(['id', 'user_id', 'text', 'place_id', 'reply_to_tweet_id', 'up_count', 'down_count', 'created_at']),
+                ->select(['id','user_id','guest_id','text','place_id','reply_to_tweet_id','up_count','down_count','created_at']),
         ])->withCount(['replies as replies_count'])
-            ->findOrFail($id, ['id', 'user_id', 'text', 'place_id', 'reply_to_tweet_id', 'up_count', 'down_count', 'created_at']);
+          ->findOrFail($id, ['id','user_id','guest_id','text','place_id','reply_to_tweet_id','up_count','down_count','created_at']);
 
         $tweet->setAttribute('replies_count', $tweet->replies->count());
 
@@ -109,43 +124,53 @@ class TweetController extends Controller
     public function store(Request $request)
     {
         $start = microtime(true);
-        $uid = optional($request->user())->id;
 
-        if (!$uid) {
-            Log::warning('TWEETS.STORE unauthenticated', ['ip' => $request->ip()]);
-            return response()->json(['message' => 'Unauthenticated'], 401);
-        }
-
+        // نفس الفاليديشن كما هو
         $data = $request->validate([
             'text' => ['required', 'string', 'max:280'],
             'place_id' => ['nullable', 'exists:places,id'],
             'reply_to_tweet_id' => ['nullable', 'exists:tweets,id'],
         ]);
 
-        // 👇 التحقق من عدد التغريدات خلال آخر دقيقة
-        $recentCount = Tweet::where('user_id', $uid)
-            ->where('created_at', '>=', now()->subMinute())
+        // الممثل (User أو Guest) عبر Sanctum
+        $actor = $request->user();
+        if (!($actor instanceof User) && !($actor instanceof Guest)) {
+            Log::warning('TWEETS.STORE unauthenticated', ['ip' => $request->ip()]);
+            return response()->json(['message' => 'Unauthenticated'], 401);
+        }
+
+        // حدّ التغريدات خلال آخر دقيقة لنفس المالك
+        $recentCount = Tweet::where('created_at', '>=', now()->subMinute())
+            ->where(function ($q) use ($actor) {
+                if ($actor instanceof User)  $q->where('user_id',  $actor->id);
+                if ($actor instanceof Guest) $q->where('guest_id', $actor->id);
+            })
             ->count();
 
         if ($recentCount > 2) {
-            return response()->json([
-                'message' => 'لا يمكنك نشر أكثر من تغريدتين في الدقيقة الواحدة'
-            ], 429); // 429 Too Many Requests
+            return response()->json(['message' => 'لا يمكنك نشر أكثر من تغريدتين في الدقيقة الواحدة'], 429);
         }
 
-        $tweet = Tweet::create([
-            'user_id' => $uid,
-            'text'    => $data['text'],
+        // بناء الداتا بحسب نوع المالك
+        $toCreate = [
+            'id' => (string) Str::uuid(), // آمن حتى لو عندك DEFAULT uuid()
+            'text' => $data['text'],
             'place_id' => $data['place_id'] ?? null,
             'reply_to_tweet_id' => $data['reply_to_tweet_id'] ?? null,
             'up_count' => 0,
             'down_count' => 0,
-        ]);
+        ];
+        if ($actor instanceof User)  $toCreate['user_id']  = $actor->id;
+        if ($actor instanceof Guest) $toCreate['guest_id'] = $actor->id;
 
-        $tweet->load('user:id,username,avatar_url');
+        $tweet = Tweet::create($toCreate);
+
+        // تحميل العلاقات مثل السابق + guest
+        $tweet->load('user:id,username,avatar_url','guest:id,nickname');
 
         Log::info('TWEETS.STORE created', [
-            'user_id'     => $uid,
+            'actor_type'  => $actor instanceof User ? 'user' : 'guest',
+            'actor_id'    => $actor->id,
             'tweet_id'    => $tweet->id,
             'text_len'    => mb_strlen($data['text']),
             'duration_ms' => round((microtime(true) - $start) * 1000, 2),
@@ -154,21 +179,24 @@ class TweetController extends Controller
         return response()->json($tweet, 201);
     }
 
-
     // حذف تغريدة
     public function destroy(Request $request, $id)
     {
         $start = microtime(true);
-        $uid = optional($request->user())->id;
-        Log::info('TWEETS.DESTROY start', ['user_id' => $uid, 'tweet_id' => (int) $id]);
 
+        $actor = $request->user(); // قد يكون User أو Guest
         $tweet = Tweet::findOrFail($id);
 
-        if (!$uid || $tweet->user_id !== $uid) {
+        $owns = ($actor instanceof User  && $tweet->user_id  === $actor->id)
+             || ($actor instanceof Guest && $tweet->guest_id === $actor->id);
+
+        if (!$owns) {
             Log::warning('TWEETS.DESTROY forbidden', [
-                'user_id'  => $uid,
-                'owner_id' => $tweet->user_id,
-                'tweet_id' => $tweet->id,
+                'actor_id'   => optional($actor)->id,
+                'actor_type' => $actor instanceof User ? 'user' : ($actor instanceof Guest ? 'guest' : 'none'),
+                'owner_user' => $tweet->user_id,
+                'owner_guest'=> $tweet->guest_id,
+                'tweet_id'   => $tweet->id,
             ]);
             return response()->json(['message' => 'غير مصرح'], 403);
         }
@@ -176,7 +204,7 @@ class TweetController extends Controller
         $tweet->delete();
 
         Log::info('TWEETS.DESTROY done', [
-            'user_id'     => $uid,
+            'actor_id'    => $actor->id,
             'tweet_id'    => (int) $id,
             'duration_ms' => round((microtime(true) - $start) * 1000, 2),
         ]);
@@ -188,29 +216,31 @@ class TweetController extends Controller
     public function reply(Request $request, $id)
     {
         $start = microtime(true);
-        $uid = optional($request->user())->id;
 
-        if (!$uid) {
+        $request->validate(['text' => ['required', 'string', 'max:280']]);
+
+        $actor = $request->user();
+        if (!($actor instanceof User) && !($actor instanceof Guest)) {
             Log::warning('TWEETS.REPLY unauthenticated', ['ip' => $request->ip(), 'parent_id' => (int) $id]);
             return response()->json(['message' => 'Unauthenticated'], 401);
         }
 
-        $request->validate(['text' => ['required', 'string', 'max:280']]);
-
         $parent = Tweet::findOrFail($id);
 
-        $reply = Tweet::create([
-            'user_id' => $uid,
-            'text'    => $request->input('text'),
+        $data = [
+            'id' => (string) Str::uuid(),
+            'text' => $request->input('text'),
             'reply_to_tweet_id' => $parent->id,
             'up_count' => 0,
             'down_count' => 0,
-        ]);
+        ];
+        if ($actor instanceof User)  $data['user_id']  = $actor->id;
+        if ($actor instanceof Guest) $data['guest_id'] = $actor->id;
 
-        $reply->load('user:id,username,avatar_url');
+        $reply = Tweet::create($data)->load('user:id,username,avatar_url','guest:id,nickname');
 
         Log::info('TWEETS.REPLY created', [
-            'user_id'     => $uid,
+            'actor_id'    => $actor->id,
             'parent_id'   => $parent->id,
             'reply_id'    => $reply->id,
             'text_len'    => mb_strlen($request->input('text')),

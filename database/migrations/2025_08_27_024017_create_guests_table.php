@@ -10,7 +10,7 @@ return new class extends Migration
     {
         // guests
         Schema::create('guests', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary(); 
             $table->string('nickname', 50)->nullable();         // سنولّدها تلقائيًا في الموديل
             $table->string('device_id', 64)->unique()->nullable(); // معرف الجهاز (كوكي/لوكل ستوريج)
             $table->char('user_agent_hash', 64)->nullable();    // اختياري

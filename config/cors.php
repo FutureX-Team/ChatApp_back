@@ -9,12 +9,14 @@ return [
 
     // Fixed origins you allow
     'allowed_origins' => [
-        'https://chat.futurex.azzamkh.sa',
-        'http://localhost:5173',
         'http://localhost:3000',
-        // production Vercel domain (short canonical)
+        'http://127.0.0.1:3000',
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+        'https://chat.futurex.azzamkh.sa',
         'https://chat-app-front-olive.vercel.app',
     ],
+
 
     // Allow ALL preview builds from your Vercel project
     // (matches e.g. https://chat-app-front-2lrpi4uid-mjeed101s-projects.vercel.app)
@@ -25,5 +27,5 @@ return [
 
     'exposed_headers' => [],
     'max_age' => 0,
-    'supports_credentials' => true, // ok even if you use Bearer tokens
+    'supports_credentials' => false, // ok even if you use Bearer tokens
 ];

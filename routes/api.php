@@ -9,7 +9,8 @@ use App\Http\Controllers\{
     ReportController,
     AdminController,
     SupportTicketController,
-    Auth\GoogleController
+    Auth\GoogleController,
+    GuestAuthController
 };
 
 
@@ -27,6 +28,12 @@ Route::post('/login',    [UserAuthController::class, 'login'])->middleware('thro
 Route::get('/auth/google',            [GoogleController::class, 'redirect'])->middleware('throttle:10,1');   // NEW
 Route::get('/auth/google/callback',   [GoogleController::class, 'callback'])->middleware('throttle:10,1');   // NEW
 
+Route::post('/guest/ensure', [GuestAuthController::class, 'ensure'])->middleware('throttle:20,1');
+
+Route::middleware('auth:sanctum')->post('/guest/logout', function (\Illuminate\Http\Request $r) {
+    $r->user()->currentAccessToken()?->delete();
+    return response()->noContent();
+})->middleware('throttle:30,1');
 // استعراض عام — حد معقول
 Route::middleware('throttle:60,1')->group(function () {
     Route::get('/tweets',        [TweetController::class, 'index']);

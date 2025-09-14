@@ -15,6 +15,7 @@ class Tweet extends Model
 
     protected $fillable = [
         'user_id',
+        'guest_id',
         'text',
         'place_id',
         'reply_to_tweet_id',
@@ -26,6 +27,11 @@ class Tweet extends Model
     {
         return $this->belongsTo(User::class, 'user_id');
     }
+    public function guest()
+    {
+        return $this->belongsTo(Guest::class, 'guest_id');
+    }
+
 
     public function replies()
     {
